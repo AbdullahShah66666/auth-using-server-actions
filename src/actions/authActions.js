@@ -1,7 +1,7 @@
 "use server";
 
 import { createTokens, hashingPassword, verifyAccessToken } from "@/lib/auth";
-import { refresh, revalidatePath } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
@@ -60,7 +60,7 @@ export async function registerUser(formData) {
 
     const { accessToken, refreshToken } = createTokens(userID, sessionID);
 
-    const hashedRefreshToken = hashingPassword(refreshToken);
+    const hashedRefreshToken = await hashingPassword(refreshToken);
 
     const newUser = new User({
       _id: userID,
@@ -172,7 +172,7 @@ export async function loginUser(formData) {
 
     const { accessToken, refreshToken } = createTokens(userID, sessionID);
 
-    const hashedRefreshToken = hashingPassword(refreshToken);
+    const hashedRefreshToken = await hashingPassword(refreshToken);
 
     const refreshTokenUpdate = await User.updateOne(
       { _id: userID }, // filter

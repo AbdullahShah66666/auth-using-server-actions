@@ -1,0 +1,18 @@
+if(access --> consists of userid and sessionid){
+  session exist : done
+  session userid ==== accessuserid : done
+  session isactive
+  session expired at> Date.now
+} else {
+  if(refresh --> consists of sessionid) {
+    check with db hashed
+    session exist
+    session userid ==== accessuserid
+    session isactive
+    session expired at> Date.now
+  }
+}
+
+abhi dashboard mein assign access token if refresh is valid wali functionality work karrahi, thats why createtoken chal raha, waran dispose hone wala hai yeh..
+
+abhi session verification is in the works..

@@ -7,6 +7,7 @@ import Session from "@/models/Session";
 
 type DecodedToken = {
   userID: string;
+  sessionID: string;
   exp: number;
 };
 
@@ -99,20 +100,50 @@ export async function hashingPassword(weakPassword: string): Promise<string> {
   return hashedPassword;
 }
 
-export async function verifySession(
-  token: string,
-  userID: string
-): Promise<SessionAuthResult> {
+export async function verifySession(token: string): Promise<SessionAuthResult> {
   try {
     await dbConnect();
-    const sessionexists = await Session.findById(userID);
+
+    const decoded = jwt.verify(token) as DecodedToken;
+
+    const { userID, sessionID } = decoded;
+
+    const sessionexists = await Session.findById(sessionID);
+
+    console.log("sessionexists: ", sessionexists);
 
     if (!sessionexists) {
       return {
         sessionAuthenticated: false,
-        error: "Session not found",
+        error: "Session not does not exist",
       };
     }
+
+    if (sessionexists.userID !== userID) {
+      return {
+        sessionAuthenticated: false,
+        error: "Session not verified",
+      };
+    }
+
+    if (!sessionexists.isActive) {
+      return {
+        sessionAuthenticated: false,
+        error: "Session is InActive",
+      };
+    }
+
+    if (sessionexists.expiresAt < Date.now()) {
+      return {
+        sessionAuthenticated: false,
+        error: "Session is Expired",
+      };
+    }
+
+    return {
+      sessionAuthenticated: true,
+      message: "Session authenticated successfully",
+    };
   } catch (error) {
     return {
       sessionAuthenticated: false,
