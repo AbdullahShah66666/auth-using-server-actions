@@ -1,19 +1,15 @@
 import mongoose, { Schema } from "mongoose";
 
-/* 
+
 if (process.env.NODE_ENV === "development") {
   delete mongoose.models.User;
-} */
+}
 
 const UserSchema = new Schema({
   _id: {
     type: String,
     default: crypto.randomUUID(),
     //    default: "crypto.randomUUID()",
-  },
-  refreshTokenID: {
-    type: String,
-    required: true,
   },
   username: {
     type: String,

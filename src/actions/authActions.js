@@ -9,6 +9,9 @@ import dbConnect from "@/lib/dbConnect";
 import bcrypt from "bcryptjs";
 import User from "@/models/User";
 import Session from "@/models/Session";
+import jwt from "jsonwebtoken";
+
+const SECRET_KEY = process.env.JWT_SECRET_KEY;
 
 export async function registerUser(formData) {
   let success = false;
@@ -60,14 +63,11 @@ export async function registerUser(formData) {
 
     const { accessToken, refreshToken } = createTokens(userID, sessionID);
 
-    const hashedRefreshToken = await hashingPassword(refreshToken);
-
     const newUser = new User({
       _id: userID,
       username,
       email,
       password: hashedPassword,
-      refreshTokenID: hashedRefreshToken,
     });
 
     await newUser.save();
@@ -172,13 +172,14 @@ export async function loginUser(formData) {
 
     const { accessToken, refreshToken } = createTokens(userID, sessionID);
 
+    /* 
     const hashedRefreshToken = await hashingPassword(refreshToken);
 
     const refreshTokenUpdate = await User.updateOne(
       { _id: userID }, // filter
       { $set: { refreshTokenID: hashedRefreshToken } } // update
     );
-
+ */
     cookieStore.set("accessToken", accessToken, {
       maxAge: 60 * 15,
     });
@@ -215,12 +216,25 @@ export async function logout() {
 
   try {
     const cookieStore = await cookies();
-    const accessTokenExists = cookieStore.get("accessToken");
-    const refreshTokenExists = cookieStore.get("refreshToken");
+    const accessTokenExists = cookieStore.get("accessToken")?.value;
+    const refreshTokenExists = cookieStore.get("refreshToken")?.value;
 
     if (accessTokenExists || refreshTokenExists) {
       cookieStore.delete("accessToken");
       cookieStore.delete("refreshToken");
+
+      const tokenToDecode = accessTokenExists || refreshTokenExists;
+      const decoded = jwt.verify(tokenToDecode, SECRET_KEY);
+      const { sessionID } = decoded;
+
+      if (sessionID) {
+        const session = await Session.findById(sessionID);
+        if (session) {
+          session.isActive = false;
+          await session.save();
+        }
+      }
+
     } else {
       return {
         success: false,

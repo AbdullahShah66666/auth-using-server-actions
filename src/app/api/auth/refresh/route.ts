@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createToken } from "@/lib/auth";
-import User from "@/models/User";
+import { createToken, verifyRefreshToken } from "@/lib/auth";
+import Session from "@/models/Session";
 import dbConnect from "@/lib/dbConnect";
 
 export async function GET() {
@@ -9,44 +9,60 @@ export async function GET() {
     await dbConnect();
 
     const cookieStore = await cookies();
-    const refreshTokenFromCookie = cookieStore.get("refreshToken")?.value;
-    const accessTokenFromCookie = cookieStore.get("accessToken")?.value;
+    const accessToken = cookieStore.get("accessToken")?.value;
+    const refreshToken = cookieStore.get("refreshToken")?.value;
 
-    if (!refreshTokenFromCookie) {
-      return NextResponse.json({
-        success: false,
-        message: "Your session has expired, so Login AGAIN!...",
-      });
-    }
-    console.log("refreshTokenFromCookie: ", refreshTokenFromCookie);
-
-    if (accessTokenFromCookie) {
+    // If access token already exists, no need to refresh
+    if (accessToken) {
       return NextResponse.json({
         success: true,
-        message: "Doesn't need to ReAssign Access Token",
+        message: "Access token already exists",
       });
     }
 
-    const user = await User.findOne({
-      refreshTokenID: refreshTokenFromCookie,
-    });
-    if (!user) return false;
-    const { _id: userID } = user;
+    // No refresh token = no session re-entry
+    if (!refreshToken) {
+      return NextResponse.json({
+        success: false,
+        message: "Session expired. Please log in again.",
+      });
+    }
 
-    const refreshedAccessToken = createToken(userID);
+    const result = await verifyRefreshToken(refreshToken);
 
-    console.log("refreshedAccessToken: ", refreshedAccessToken);
+    if (!result.isAuthenticated) {
+      return NextResponse.json({
+        success: false,
+        message: "Invalid refresh token",
+      });
+    }
 
-    cookieStore.set("accessToken", refreshedAccessToken, {
+    const { sessionID } = result.decodedToken;
+
+    const session = await Session.findById(sessionID);
+
+    if (!session || !session.isActive || session.expiresAt < new Date()) {
+      return NextResponse.json({
+        success: false,
+        message: "Session expired. Please log in again.",
+      });
+    }
+
+    const userID = session.userID;
+
+    const newAccessToken = createToken(userID, session._id);
+
+    cookieStore.set("accessToken", newAccessToken, {
+      httpOnly: true,
       maxAge: 60 * 15,
     });
 
     return NextResponse.json({
       success: true,
-      message: "Access Token Created",
+      message: "New access token issued",
     });
   } catch (error) {
-    console.error("Process Failed: ", error);
+    console.error("Access token refresh failed:", error);
     return NextResponse.json({
       success: false,
       error: "Internal Server Error",

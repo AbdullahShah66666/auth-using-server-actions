@@ -21,7 +21,7 @@ type SessionAuthResult =
 
 const SECRET_KEY = process.env.JWT_SECRET_KEY!;
 
-export function createToken(userID: string) {
+export function createToken(userID: string, _id: any) {
   const accessToken = jwt.sign({ userID }, SECRET_KEY, {
     expiresIn: "15m",
   });
@@ -57,39 +57,61 @@ export function verifyAccessToken(token: string): AuthResult {
   }
 }
 
-export async function verifyRefreshToken(token: string): Promise<AuthResult> {
+export async function verifyRefreshToken(
+  token: string
+): Promise<AuthResult> {
   try {
     await dbConnect();
 
+    // 1️⃣ Verify JWT signature
     const decoded = jwt.verify(token, SECRET_KEY) as DecodedToken;
 
-    const user = await User.findById(decoded.userID).select("refreshToken");
+    const { sessionID } = decoded;
 
-    if (!user || !user.refreshToken) {
+    if (!sessionID) {
       return {
         isAuthenticated: false,
-        error: "Refresh token not found in database.",
+        error: "Invalid refresh token payload",
       };
     }
 
-    // 3. Compare token with stored hash
-    const isValid = await bcrypt.compare(token, user.refreshTokenHash);
+    // 2️⃣ Find session
+    const session = await Session.findById(sessionID);
 
-    if (!isValid) {
+    if (!session) {
       return {
         isAuthenticated: false,
-        error: "Refresh token mismatch.",
+        error: "Session not found",
       };
     }
 
+    // 3️⃣ Validate session
+    if (!session.isActive) {
+      return {
+        isAuthenticated: false,
+        error: "Session inactive",
+      };
+    }
+
+    if (session.expiresAt < new Date()) {
+      return {
+        isAuthenticated: false,
+        error: "Session expired",
+      };
+    }
+
+    // ✅ Refresh token is valid
     return {
       isAuthenticated: true,
-      decodedToken: decoded,
+      decodedToken: {
+        sessionID: session._id,
+        userID: session.userID, // IMPORTANT
+      },
     };
   } catch (error) {
     return {
       isAuthenticated: false,
-      error: "JWT Verification Failed.",
+      error: "Refresh token verification failed",
     };
   }
 }

@@ -1,48 +1,64 @@
+import { NextRequest, NextResponse } from "next/server";
 import {
   verifyAccessToken,
   verifyRefreshToken,
   verifySession,
 } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import { NextRequest, NextResponse } from "next/server";
 
-async function proxy(request: NextRequest) {
-  const accessToken =
-    request.cookies.get("accessToken")?.value || "sample token";
-  const refreshToken = request.cookies.get("refreshToken")?.value;
-
-  const refreshTokenRes = refreshToken
-    ? await verifyRefreshToken(refreshToken)
-    : null;
-
-  const { isAuthenticated: refreshTokenAuthenticated } = refreshTokenRes || {};
-  //console.log(refreshTokenAuthenticated);
-
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const url = request.nextUrl.clone();
-  url.pathname = "/login";
-  url.searchParams.set("message", "Please log in to access the dashboard");
+  // Only protect dashboard
+  if (!pathname.startsWith("/dashboard")) {
+    return NextResponse.next();
+  }
 
-  if (pathname.startsWith("/dashboard")) {
-    if (accessToken || verifyAccessToken(accessToken).isAuthenticated) {
+  const accessToken = request.cookies.get("accessToken")?.value;
+  const refreshToken = request.cookies.get("refreshToken")?.value;
+
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/login";
+  loginUrl.searchParams.set(
+    "message",
+    "Please log in to access the dashboard"
+  );
+
+  // 1️⃣ No tokens at all → dead
+  if (!accessToken && !refreshToken) {
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // 2️⃣ Access token present → try to fully authenticate
+  if (accessToken) {
+    const accessRes = verifyAccessToken(accessToken);
+
+    if (accessRes.isAuthenticated) {
       const sessionRes = await verifySession(accessToken);
-      const { sessionAuthenticated } = sessionRes || {};
 
-      if (!sessionAuthenticated) {
-        NextResponse.redirect(url);
+      if (sessionRes.sessionAuthenticated) {
+        // ✅ Access token + valid session
+        return NextResponse.next();
       }
     }
-    if (refreshToken || refreshTokenAuthenticated) {
+    // ❌ Access invalid or session invalid
+    // Fall through to refresh logic
+  }
+
+  // 3️⃣ Access missing OR invalid → try refresh token
+  if (refreshToken) {
+    const refreshRes = await verifyRefreshToken(refreshToken);
+
+    if (refreshRes.isAuthenticated) {
       const sessionRes = await verifySession(refreshToken);
-      const { sessionAuthenticated } = sessionRes || {};
-      if (!sessionAuthenticated) {
-        NextResponse.redirect(url);
+
+      if (sessionRes.sessionAuthenticated) {
+        // ✅ Session still alive
+        // Access token will be re-minted by refresh route
+        return NextResponse.next();
       }
     }
   }
 
+  // 4️⃣ Everything failed → goodbye
   return NextResponse.next();
 }
-
-export default proxy;
