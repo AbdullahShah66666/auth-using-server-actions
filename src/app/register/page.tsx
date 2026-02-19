@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bounce, Slide, ToastContainer, Zoom, toast } from "react-toastify";
+import { Bounce, ToastContainer, Zoom, toast } from "react-toastify";
 import { registerUser } from "@/actions/authActions.js";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

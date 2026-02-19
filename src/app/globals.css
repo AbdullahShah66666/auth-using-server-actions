@@ -91,3 +91,210 @@ body {
 .neon-link-glow:focus-visible {
   background-position: 100% 0;
 }
+
+.nav-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 22px;
+  color: #f8fafc;
+  font-size: 0.9rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.nav-btn span {
+  position: relative;
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+
+.nav-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  transition: all 0.3s ease;
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  transform: scale(0.1, 1);
+}
+
+.nav-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transition: all 0.3s ease;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.nav-btn:hover span,
+.nav-btn:focus-visible span {
+  letter-spacing: 0.3em;
+}
+
+.nav-btn:hover::before,
+.nav-btn:focus-visible::before {
+  opacity: 1;
+  transform: scale(1, 1);
+}
+
+.nav-btn:hover::after,
+.nav-btn:focus-visible::after {
+  opacity: 0;
+  transform: scale(0.1, 1);
+}
+
+.btn {
+  line-height: 50px;
+  height: 50px;
+  text-align: center;
+  width: 250px;
+  cursor: pointer;
+}
+
+.btn-one {
+  color: #fff;
+  transition: all 0.3s;
+  position: relative;
+}
+
+.btn-one span {
+  transition: all 0.3s;
+}
+
+.btn-one::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  opacity: 0;
+  transition: all 0.3s;
+  border-top-width: 1px;
+  border-bottom-width: 1px;
+  border-top-style: solid;
+  border-bottom-style: solid;
+  border-top-color: rgba(255, 255, 255, 0.5);
+  border-bottom-color: rgba(255, 255, 255, 0.5);
+  transform: scale(0.1, 1);
+}
+
+.btn-one:hover span,
+.btn-one:focus-visible span {
+  letter-spacing: 2px;
+}
+
+.btn-one:hover::before,
+.btn-one:focus-visible::before {
+  opacity: 1;
+  transform: scale(1, 1);
+}
+
+.btn-one::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  transition: all 0.3s;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.btn-one:hover::after,
+.btn-one:focus-visible::after {
+  opacity: 0;
+  transform: scale(0.1, 1);
+}
+
+.neon-nav-btn {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(244, 114, 182, 0.18));
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.25);
+  color: #e0f2fe;
+}
+
+.neon-nav-btn:hover,
+.neon-nav-btn:focus-visible {
+  border-color: rgba(244, 114, 182, 0.6);
+  box-shadow: 0 16px 35px rgba(217, 70, 239, 0.25);
+}
+
+.nav-toggle {
+  position: relative;
+  z-index: 40;
+}
+
+.hamburger {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  width: 36px;
+  height: 26px;
+}
+
+.hamburger span {
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, #22d3ee, #818cf8, #f472b6);
+  border-radius: 999px;
+  transition: transform 300ms ease, opacity 200ms ease, width 200ms ease, box-shadow 250ms ease;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.hamburger span:nth-child(2) {
+  width: 70%;
+  align-self: flex-start;
+}
+
+.hamburger:hover span {
+  width: 100%;
+}
+
+.hamburger.is-open {
+  transform: rotate(180deg) scale(1.1);
+  transition: transform 300ms ease;
+}
+
+.hamburger.is-open span:nth-child(1) {
+  transform: translateY(10px) translateX(1px) rotate(45deg);
+}
+
+.hamburger.is-open span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger.is-open span:nth-child(3) {
+  transform: translateY(-10px) translateX(1px) rotate(-45deg);
+}
+
+.nav-panel {
+  opacity: 0;
+  transform: translateY(-100%);
+  transition: transform 360ms ease, opacity 320ms ease;
+}
+
+.nav-panel.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.nav-panel.is-closed {
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
