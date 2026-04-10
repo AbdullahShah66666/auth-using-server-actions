@@ -1,14 +1,18 @@
 "use server";
 
-import { createTokens, hashingPassword, verifyAccessToken } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
+import {
+  createAndStoreAuthSession,
+  deactivateSessionFromToken,
+  hashingPassword,
+  verifyAccessSession,
+} from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
 import bcrypt from "bcryptjs";
 import User from "@/models/User";
-import Session from "@/models/Session";
 import jwt from "jsonwebtoken";
 
 const SECRET_KEY = process.env.JWT_SECRET_KEY;
@@ -51,41 +55,17 @@ export async function registerUser(formData) {
       };
     }
 
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-    const session = await Session.create({
-      userID,
-      isActive: true,
-      expiresAt,
-    });
-
-    const { _id: sessionID } = session;
-
-    const { accessToken, refreshToken } = createTokens(userID, sessionID);
-
     const newUser = new User({
       _id: userID,
       username,
       email,
       password: hashedPassword,
+      role: "user",
     });
 
     await newUser.save();
 
-    //    console.log("authToken: ", authToken);
-
-    /*     cookieStore.set("authToken", jwt_token, {
-      maxAge: 60 * 60,
-      });
-      */
-
-    cookieStore.set("accessToken", accessToken, {
-      maxAge: 60 * 15,
-    });
-
-    cookieStore.set("refreshToken", refreshToken, {
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    await createAndStoreAuthSession(cookieStore, userID);
 
     revalidatePath("/dashboard");
     success = true;
@@ -160,33 +140,7 @@ export async function loginUser(formData) {
       });
       */
 
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-    const session = await Session.create({
-      userID,
-      isActive: true,
-      expiresAt,
-    });
-
-    const { _id: sessionID } = session;
-
-    const { accessToken, refreshToken } = createTokens(userID, sessionID);
-
-    /* 
-    const hashedRefreshToken = await hashingPassword(refreshToken);
-
-    const refreshTokenUpdate = await User.updateOne(
-      { _id: userID }, // filter
-      { $set: { refreshTokenID: hashedRefreshToken } } // update
-    );
- */
-    cookieStore.set("accessToken", accessToken, {
-      maxAge: 60 * 15,
-    });
-
-    cookieStore.set("refreshToken", refreshToken, {
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    await createAndStoreAuthSession(cookieStore, userID);
 
     revalidatePath("/dashboard");
     return {
@@ -224,16 +178,7 @@ export async function logout() {
       cookieStore.delete("refreshToken");
 
       const tokenToDecode = accessTokenExists || refreshTokenExists;
-      const decoded = jwt.verify(tokenToDecode, SECRET_KEY);
-      const { sessionID } = decoded;
-
-      if (sessionID) {
-        const session = await Session.findById(sessionID);
-        if (session) {
-          session.isActive = false;
-          await session.save();
-        }
-      }
+      await deactivateSessionFromToken(tokenToDecode);
 
     } else {
       return {
@@ -267,7 +212,7 @@ export async function resetPassword(formData) {
     const hashedNewPassword = await hashingPassword(newPassword);
 
     const { isAuthenticated, decodedToken, error } =
-      verifyAccessToken(accessToken);
+      await verifyAccessSession(accessToken);
 
     if (isAuthenticated) {
       const { userID } = decodedToken;

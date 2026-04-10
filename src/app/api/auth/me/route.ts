@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
 import dbConnect from "@/lib/dbConnect";
 import User from "@/models/User";
-
-const SECRET_KEY = process.env.JWT_SECRET_KEY;
+import { verifyAccessSession } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -17,11 +15,18 @@ export async function GET() {
       return NextResponse.json({ success: false, message: "Unauthorized" });
     }
 
-    const decoded = jwt.verify(accessToken, SECRET_KEY) as {
-      userID: string;
-    };
+    const accessResult = await verifyAccessSession(accessToken);
 
-    const user = await User.findById(decoded.userID).select("username");
+    if (!accessResult.isAuthenticated) {
+      return NextResponse.json({
+        success: false,
+        message: accessResult.error,
+      });
+    }
+
+    const user = await User.findById(accessResult.decodedToken.userID).select(
+      "username role"
+    );
 
     if (!user) {
       return NextResponse.json({ success: false, message: "User not found" });
@@ -30,6 +35,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       username: user.username,
+      role: user.role ?? "user",
     });
   } catch (error) {
     return NextResponse.json({

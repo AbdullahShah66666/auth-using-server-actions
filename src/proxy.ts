@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  verifyAccessToken,
-  verifyRefreshToken,
-  verifySession,
+  ACCESS_COOKIE_OPTIONS,
+  mintAccessToken,
+  verifyAccessSession,
+  verifyRefreshSession,
 } from "@/lib/auth";
 
 export async function proxy(request: NextRequest) {
@@ -30,35 +31,29 @@ export async function proxy(request: NextRequest) {
 
   // 2️⃣ Access token present → try to fully authenticate
   if (accessToken) {
-    const accessRes = verifyAccessToken(accessToken);
+    const accessRes = await verifyAccessSession(accessToken);
 
     if (accessRes.isAuthenticated) {
-      const sessionRes = await verifySession(accessToken);
-
-      if (sessionRes.sessionAuthenticated) {
-        // ✅ Access token + valid session
-        return NextResponse.next();
-      }
+      return NextResponse.next();
     }
-    // ❌ Access invalid or session invalid
-    // Fall through to refresh logic
   }
 
   // 3️⃣ Access missing OR invalid → try refresh token
   if (refreshToken) {
-    const refreshRes = await verifyRefreshToken(refreshToken);
+    const refreshRes = await verifyRefreshSession(refreshToken);
 
     if (refreshRes.isAuthenticated) {
-      const sessionRes = await verifySession(refreshToken);
+      const response = NextResponse.next();
+      const newAccessToken = mintAccessToken(
+        refreshRes.decodedToken.userID,
+        refreshRes.decodedToken.sessionID
+      );
 
-      if (sessionRes.sessionAuthenticated) {
-        // ✅ Session still alive
-        // Access token will be re-minted by refresh route
-        return NextResponse.next();
-      }
+      response.cookies.set("accessToken", newAccessToken, ACCESS_COOKIE_OPTIONS);
+      return response;
     }
   }
 
   // 4️⃣ Everything failed → goodbye
-  return NextResponse.next();
+  return NextResponse.redirect(loginUrl);
 }

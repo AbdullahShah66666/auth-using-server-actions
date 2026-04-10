@@ -1,8 +1,6 @@
-import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/dbConnect";
-import User from "@/models/User";
 import Session from "@/models/Session";
 
 type DecodedToken = {
@@ -15,67 +13,110 @@ type AuthResult =
   | { isAuthenticated: true; decodedToken: DecodedToken }
   | { isAuthenticated: false; error: string };
 
-type SessionAuthResult =
-  | { sessionAuthenticated: true; message: string }
-  | { sessionAuthenticated: false; error: string };
+type TokenKind = "access" | "refresh";
+
+type AuthCookieStore = {
+  set: (
+    name: string,
+    value: string,
+    options: {
+      httpOnly: boolean;
+      sameSite: "lax";
+      secure: boolean;
+      path: string;
+      maxAge: number;
+    }
+  ) => void;
+};
+
+type DecodableSessionToken = {
+  sessionID: string;
+};
 
 const SECRET_KEY = process.env.JWT_SECRET_KEY!;
+export const ACCESS_TOKEN_MAX_AGE = 60 * 60;
+export const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24 * 30;
+export const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
 
-export function createToken(userID: string, _id: any) {
-  const accessToken = jwt.sign({ userID }, SECRET_KEY, {
-    expiresIn: "15m",
+export const ACCESS_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+  maxAge: ACCESS_TOKEN_MAX_AGE,
+};
+
+export const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+  maxAge: REFRESH_TOKEN_MAX_AGE,
+};
+
+export function mintAccessToken(userID: string, sessionID: string) {
+  return jwt.sign({ userID, sessionID }, SECRET_KEY, {
+    expiresIn: `${ACCESS_TOKEN_MAX_AGE}s`,
   });
-  return accessToken;
 }
 
-export function createTokens(userID: string, sessionID: string) {
-  const accessToken = jwt.sign({ userID, sessionID }, SECRET_KEY, {
-    expiresIn: "15m",
-  });
-  const refreshToken = jwt.sign({ sessionID }, SECRET_KEY, {
-    expiresIn: "7d",
-  });
-
-  return {
-    accessToken,
-    refreshToken,
-  };
-}
-
-export function verifyAccessToken(token: string): AuthResult {
+export async function deactivateSessionFromToken(token: string) {
   try {
-    const decoded = jwt.verify(token, SECRET_KEY) as DecodedToken;
+    await dbConnect();
+
+    const decoded = jwt.verify(token, SECRET_KEY) as DecodableSessionToken;
+    const sessionID = decoded.sessionID;
+
+    if (!sessionID) {
+      return {
+        success: false,
+        error: "Invalid session token payload",
+      };
+    }
+
+    const session = await Session.findById(sessionID);
+
+    if (!session) {
+      return {
+        success: false,
+        error: "Session not found",
+      };
+    }
+
+    session.isActive = false;
+    await session.save();
+
     return {
-      isAuthenticated: true,
-      decodedToken: decoded,
+      success: true,
     };
-  } catch (error) {
+  } catch {
     return {
-      isAuthenticated: false,
-      error: "JWT Verification Failed.",
+      success: false,
+      error: "Session deactivation failed",
     };
   }
 }
 
-export async function verifyRefreshToken(
-  token: string
+async function validateSessionToken(
+  token: string,
+  kind: TokenKind
 ): Promise<AuthResult> {
   try {
     await dbConnect();
 
-    // 1️⃣ Verify JWT signature
     const decoded = jwt.verify(token, SECRET_KEY) as DecodedToken;
+    const { userID, sessionID } = decoded;
 
-    const { sessionID } = decoded;
-
-    if (!sessionID) {
+    if (!sessionID || (kind === "access" && !userID)) {
       return {
         isAuthenticated: false,
-        error: "Invalid refresh token payload",
+        error:
+          kind === "access"
+            ? "Invalid access token payload"
+            : "Invalid refresh token payload",
       };
     }
 
-    // 2️⃣ Find session
     const session = await Session.findById(sessionID);
 
     if (!session) {
@@ -85,7 +126,6 @@ export async function verifyRefreshToken(
       };
     }
 
-    // 3️⃣ Validate session
     if (!session.isActive) {
       return {
         isAuthenticated: false,
@@ -100,90 +140,66 @@ export async function verifyRefreshToken(
       };
     }
 
-    // ✅ Refresh token is valid
+    if (kind === "access" && userID !== session.userID) {
+      return {
+        isAuthenticated: false,
+        error: "Session user mismatch",
+      };
+    }
+
     return {
       isAuthenticated: true,
       decodedToken: {
+        userID: session.userID,
         sessionID: session._id,
-        userID: session.userID, // IMPORTANT
+        exp: decoded.exp,
       },
     };
-  } catch (error) {
+  } catch {
     return {
       isAuthenticated: false,
-      error: "Refresh token verification failed",
+      error:
+        kind === "access"
+          ? "Access session verification failed"
+          : "Refresh session verification failed",
     };
   }
+}
+
+export async function verifyAccessSession(token: string): Promise<AuthResult> {
+  return validateSessionToken(token, "access");
+}
+
+export async function verifyRefreshSession(token: string): Promise<AuthResult> {
+  return validateSessionToken(token, "refresh");
 }
 
 export async function hashingPassword(weakPassword: string): Promise<string> {
-  const hashedPassword = await bcrypt.hash(weakPassword, 10);
-
-  return hashedPassword;
+  return bcrypt.hash(weakPassword, 10);
 }
 
-export async function verifySession(token: string): Promise<SessionAuthResult> {
-  try {
-    await dbConnect();
+export async function createAndStoreAuthSession(
+  cookieStore: AuthCookieStore,
+  userID: string
+) {
+  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_MS);
 
-    const decoded = jwt.verify(token) as DecodedToken;
+  const session = await Session.create({
+    userID,
+    isActive: true,
+    expiresAt,
+  });
 
-    const { userID, sessionID } = decoded;
+  const { _id: sessionID } = session;
+  const accessToken = jwt.sign({ userID, sessionID }, SECRET_KEY, {
+    expiresIn: `${ACCESS_TOKEN_MAX_AGE}s`,
+  });
+  const refreshToken = jwt.sign({ sessionID }, SECRET_KEY, {
+    expiresIn: `${REFRESH_TOKEN_MAX_AGE}s`,
+  });
 
-    const sessionexists = await Session.findById(sessionID);
+  cookieStore.set("accessToken", accessToken, ACCESS_COOKIE_OPTIONS);
+  cookieStore.set("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
 
-    console.log("sessionexists: ", sessionexists);
-
-    if (!sessionexists) {
-      return {
-        sessionAuthenticated: false,
-        error: "Session not does not exist",
-      };
-    }
-
-    if (sessionexists.userID !== userID) {
-      return {
-        sessionAuthenticated: false,
-        error: "Session not verified",
-      };
-    }
-
-    if (!sessionexists.isActive) {
-      return {
-        sessionAuthenticated: false,
-        error: "Session is InActive",
-      };
-    }
-
-    if (sessionexists.expiresAt < Date.now()) {
-      return {
-        sessionAuthenticated: false,
-        error: "Session is Expired",
-      };
-    }
-
-    return {
-      sessionAuthenticated: true,
-      message: "Session authenticated successfully",
-    };
-  } catch (error) {
-    return {
-      sessionAuthenticated: false,
-      error: "Session Authentication Failed",
-    };
-  }
+  return { sessionID, accessToken, refreshToken };
 }
-
-/* 
-export async function welcomeUser() {
-  try {
-    await dbConnect();
-
-    
-
-
-  } catch {
-
-  }
-}
- */

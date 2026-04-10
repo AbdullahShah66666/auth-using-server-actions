@@ -13,7 +13,7 @@ function Navbar() {
       <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4 text-white">
         <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-200">
           <Link href="/" className="neon-link neon-link-glow">
-            Authentication System
+            Secure Access Portal
           </Link>
         </h1>
         <button
@@ -21,7 +21,7 @@ function Navbar() {
           aria-expanded={menuOpen}
           aria-label="Toggle navigation menu"
           onClick={() => setMenuOpen((open) => !open)}
-          className="nav-toggle inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 p-2 text-white transition hover:border-cyan-300/60"
+          className="cursor-pointer nav-toggle inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 p-2 text-white transition hover:border-cyan-300/60"
         >
           <span className={`px-1 hamburger ${menuOpen ? "is-open" : ""}`}>
             <span />
